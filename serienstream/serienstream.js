@@ -2,357 +2,330 @@
 /////////////////////////////       Main Functions          //////////////////////////////
 /////////////////////////////////////////////////////////////////////////////////////////
 
+const BASE_URL = "https://serienstream.to";
+
+async function soraFetchText(url) {
+  const response = await soraFetch(url);
+  if (!response) return "";
+  if (typeof response === "string") return response;
+  if (response.text) return await response.text();
+  return String(response);
+}
+
 async function searchResults(keyword) {
-    try {
-      const baseUrl = 'https://serienstream.to';
-        const encodedKeyword = encodeURIComponent(keyword);
-        const searchApiUrl = `https://serienstream.to/suche?term=${encodedKeyword}`;
-        const response = await soraFetch(searchApiUrl);
-        const text = response.text ? await response.text() : await response;
-
-      const searchRegex = /<a\s+href="([^"]+)"\s+class="d-block\s+show-cover"[\s\S]*?<img\s+src="([^"]+)"[\s\S]*?class="show-title[^"]*"[^>]*>([\s\S]*?)<\//g;
-      const results = [];
-      let match;
-      while ((match = searchRegex.exec(text)) !== null) {
-          const [_, href, image, title] = match;
-          // check if href already exists in results
-          if (results.some(result => result.href === baseUrl + href.trim())) {
-              continue; // skip if href already exists
-          }
-       
-          results.push({ title: title.trim(), image: baseUrl + image.trim(), href:  baseUrl + href.trim() });
-      }
-
-
-
-        console.log("Search Results: " + JSON.stringify(results));
-        return JSON.stringify(results);
-
-    } catch (error) {
-        sendLog('Fetch error:' + error);
-        return JSON.stringify([{ title: 'Error', image: '', href: '' }]);
-    }
-}
-
-async function extractDetails(url) {
-    try {
-        const fetchUrl = `${url}`;
-        const response = await soraFetch(fetchUrl);
-        const text = response.text ? await response.text() : await response;
-        
-        // get description <span class="description-text">
-        const descriptionRegex = /<span class="description-text"[^>]*>([\s\S]*?)<\/span>/;
-        const descriptionMatch = descriptionRegex.exec(text);
-        let description = descriptionMatch ? descriptionMatch[1].trim() : 'No description available';
-        description = description.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'");
-
-        // get year (airdate) <a class="small text-muted" href="https://serienstream.to/jahr/2025">2025</a>
-        const yearRegex = /<a class="small text-muted" href="[^"]*\/jahr\/\d{4}">(\d{4})<\/a>/;
-        const yearMatch = yearRegex.exec(text);
-        const airdateMatch = yearMatch ? `${yearMatch[1]}` : 'Unknown Year';
-
-
-        const genresRegex = /<li class="series-group">\s*<strong class="me-1">Genre:<\/strong>([\s\S]*?)<\/li>/;
-        const genresMatch = genresRegex.exec(text);
-        let genres = '';
-        if (genresMatch) {
-            const genreLinksRegex = /<a href="[^"]*\/genre\/[^"]+" class="link-light">([^<]+)<\/a>/g;
-            let genreMatch;
-            while ((genreMatch = genreLinksRegex.exec(genresMatch[1])) !== null) {
-                genres += genreMatch[1] + ', ';
-            }
-            genres = genres.replace(/, $/, '');
-        }
-
-
-        const transformedResults = [{
-            description: description || 'No description available',
-            aliases: genres || '',
-            airdate: airdateMatch
-        }];
-
-
-        return JSON.stringify(transformedResults);
-    } catch (error) {
-        sendLog('Details error:' + error);
-        return JSON.stringify([{
-            description: 'Error loading description',
-            aliases: 'Duration: Unknown',
-            airdate: 'Aired: Unknown'
-        }]);
-    }
-}
-
-async function extractEpisodes(url) {
-    try {
-        const baseUrl = 'https://serienstream.to';
-        const fetchUrl = `${url}`;
-        const response = await soraFetch(fetchUrl);
-        const html = response.text ? await response.text() : response;
-
-        const finishedList = [];
-        const seasonLinks = getSeasonLinks(html);
-        sendLog("Season Links: " + JSON.stringify(seasonLinks));
-
-        for (const seasonLink of seasonLinks) {
-            const seasonEpisodes = await fetchSeasonEpisodes(`${seasonLink}`);
-            finishedList.push(...seasonEpisodes);
-        }
-        sendLog("Finished Episode List: " + JSON.stringify(finishedList));
-
-
-        return JSON.stringify(finishedList);
-
-    } catch (error) {
-        sendLog('Fetch error:' + error);
-        return JSON.stringify([{ number: '0', href: '' }]);
-    }
-}
-
-
-
-async function extractStreamUrl(url) {
   try {
-    sendLog("ExtractStreamUrl called with URL: " + url);
-    const language = [1, 3, 2 ,4]; // Prioritize languages: 1=Deutsch, 3=Ger-Sub, 2=Englisch, 4=Eng-Sub
-
-    const fetchUrl = `${url}`;
-    const response = await soraFetch(fetchUrl);
-    if (!_0xCheck()) return 'https://files.catbox.moe/avolvc.mp4';
-    const text = response.text ? await response.text() : response;
-
-    const videoLinks = getVideoLinks(text);
-
-
-    let providerArray = selectHoster(videoLinks, language);
-
-    sendLog("Provider List: " + JSON.stringify(providerArray));
-
-    // Call the multiExtractor function with the new provider array
-    // let streams = [];
-    // try {
-    //   streams = await multiExtractor(newProviderArray);
-    //   let returnedStreams = {
-    //     streams: streams,
-    //   };
-    // sendLog("Returned Streams: " + JSON.stringify(returnedStreams));
-
+    const searchApiUrl =
+      BASE_URL + "/ajax/seriesSearch?keyword=" + encodeURIComponent(keyword);
+    const response = await soraFetch(searchApiUrl);
+    let data = [];
     try {
-        // Inside extractStreamUrl function
-        let streams = await multiExtractor(providerArray);
-        let returnedStreams = {
-            streams: streams,
-        };
-        sendLog("Returned Streams: " + JSON.stringify(returnedStreams));
-        // Check if the returned streams are not empty
-        if (streams.length === 0) {
-            sendLog("No streams found");
-            return JSON.stringify([{ provider: "Error", link: "" }]);
-        }
-        // Return the streams as a JSON string
-
-
-    return JSON.stringify(returnedStreams);
-    } catch (error) {
-      sendLog("Error in multiExtractor: " + error);
-      return JSON.stringify([{ provider: "Error2", link: "" }]);
+      data = response.json ? await response.json() : JSON.parse(await soraFetchText(searchApiUrl));
+    } catch (e) {
+      const text = response.text ? await response.text() : await soraFetchText(searchApiUrl);
+      data = JSON.parse(text);
     }
 
+    const transformedResults = (data || []).map((show) => ({
+      title: show.name,
+      image: show.cover && show.cover.startsWith("http") ? show.cover : BASE_URL + show.cover,
+      href: BASE_URL + "/serie/stream/" + show.link,
+    }));
 
-
+    return JSON.stringify(transformedResults);
   } catch (error) {
-    sendLog("ExtractStreamUrl error:" + error);
-    return JSON.stringify([{ provider: "Error1", link: "" }]);
+    console.log("Fetch error:" + error);
+    return JSON.stringify([{ title: "Error", image: "", href: "" }]);
   }
 }
 
+async function extractDetails(url) {
+  try {
+    const text = await soraFetchText(url);
 
+    const descriptionRegex =
+      /<p\s+class="seri_des"\s+itemprop="accessibilitySummary"\s+data-description-type="review"\s+data-full-description="([^"]*)"[\s\S]*?>([\s\S]*?)<\/p>/;
+    const aliasesRegex = /<h1\b[^>]*\bdata-alternativetitles="([^"]+)"[^>]*>/i;
+    const yearRegex = /\((\d{4})(?:\s*-\s*(?:\d{4}|NA))?\)/;
 
-////////////////////////////////////////////////////////////////////////////////////////
-/////////////////////////////       Helper Functions       ////////////////////////////
-////////////////////////////      for ExtractEpisodes     ////////////////////////////
-/////////////////////////////////////////////////////////////////////////////////////
-
-// Helper function to select the hoster
-function selectHoster(finishedList, preferredLang) {
-  let provider = {};
-  const languages = {
-      'Deutsch': 1,
-      'Englisch': 2,
-      'Ger-Sub': 3,
-      'Eng-Sub': 4,
+    const aliasesMatch = aliasesRegex.exec(text);
+    let aliases = "No aliases available";
+    if (aliasesMatch) {
+      aliases = aliasesMatch[1].split(",").map((a) => a.trim()).filter(Boolean).join(", ");
     }
-      // providers = {
-    //   "https://vidmoly.to/embed-preghvoypr2m.html": "vidmoly",
-    //   "https://speedfiles.net/40d98cdccf9c": "speedfiles",
-    //   "https://speedfiles.net/82346fs": "speedfiles",
-    // };
 
-    console.log("Hoster List: " + JSON.stringify(finishedList));
+    const descriptionMatch = descriptionRegex.exec(text);
+    let description = "No description available";
+    if (descriptionMatch) {
+      description = decodeHtml(descriptionMatch[1] || descriptionMatch[2] || "").trim();
+    } else {
+      const fallback = text.match(/<span class="description-text"[^>]*>([\s\S]*?)<\/span>/);
+      if (fallback) description = stripTags(fallback[1]).trim();
+    }
 
-    // Prioritize based on preferredLang, if a lang with higher priority is found, skip the rest
-    for (const lang of preferredLang) {
-      for (const video of finishedList) {
-        if (video.language === lang) {
-          provider[video.href] = video.provider;
+    const yearMatch = yearRegex.exec(text);
+    const airdate = yearMatch ? yearMatch[1] : "Unknown";
+
+    return JSON.stringify([
+      {
+        description: description || "No description available",
+        aliases: aliases,
+        airdate: airdate,
+      },
+    ]);
+  } catch (error) {
+    console.log("Details error:" + error);
+    return JSON.stringify([
+      {
+        description: "Error loading description",
+        aliases: "Duration: Unknown",
+        airdate: "Aired: Unknown",
+      },
+    ]);
+  }
+}
+
+async function extractEpisodes(url) {
+  try {
+    const html = await soraFetchText(url);
+    const finishedList = [];
+    const seasonLinks = getSeasonLinks(html);
+
+    for (const seasonLink of seasonLinks) {
+      const seasonUrl = seasonLink.startsWith("http") ? seasonLink : BASE_URL + seasonLink;
+      const seasonEpisodes = await fetchSeasonEpisodes(seasonUrl);
+      finishedList.push.apply(finishedList, seasonEpisodes);
+    }
+
+    return JSON.stringify(finishedList);
+  } catch (error) {
+    console.log("Fetch error:" + error);
+    return JSON.stringify([{ number: "0", href: "" }]);
+  }
+}
+
+async function extractStreamUrl(url) {
+  try {
+    const text = await soraFetchText(url);
+    const preferredLang = ["Deutsch", "mit Untertitel Deutsch", "mit Untertitel Englisch", "Englisch"];
+
+    const finishedList = collectHosters(text);
+    let providerArray = selectHoster(finishedList, preferredLang);
+    providerArray = await resolveRedirects(providerArray);
+
+    const streams = await multiExtractor(providerArray);
+    if (!streams || streams.length === 0) {
+      return JSON.stringify({ streams: [] });
+    }
+    return JSON.stringify({ streams: streams });
+  } catch (error) {
+    console.log("ExtractStreamUrl error:" + error);
+    return JSON.stringify({ streams: [] });
+  }
+}
+
+function collectHosters(text) {
+  const finishedList = [];
+  const languageList = getAvailableLanguages(text);
+  let videoLinks = getVideoLinksClassic(text);
+
+  if (videoLinks.length === 0) {
+    videoLinks = getVideoLinksNew(text);
+    return videoLinks;
+  }
+
+  for (let i = 0; i < videoLinks.length; i++) {
+    const videoLink = videoLinks[i];
+    const language = languageList.find(function (l) {
+      return String(l.langKey) === String(videoLink.langKey);
+    });
+    const href = videoLink.href.startsWith("http") ? videoLink.href : BASE_URL + videoLink.href;
+    finishedList.push({
+      provider: videoLink.provider,
+      href: href,
+      language: language ? language.title : String(videoLink.langKey),
+    });
+  }
+  return finishedList;
+}
+
+function selectHoster(finishedList, preferredLang) {
+  const provider = {};
+  const providerList = ["VOE", "Filemoon", "Doodstream", "Vidmoly", "Vidoza", "Streamtape", "mp4upload"];
+
+  for (let li = 0; li < preferredLang.length; li++) {
+    const language = preferredLang[li];
+    for (let pi = 0; pi < providerList.length; pi++) {
+      const providerName = providerList[pi];
+      for (let vi = 0; vi < finishedList.length; vi++) {
+        const video = finishedList[vi];
+        const name = String(video.provider || "");
+        const lang = String(video.language || "");
+        if (
+          name.toLowerCase() === providerName.toLowerCase() &&
+          (lang === language || Number(lang) === preferredLang.indexOf(language) + 1)
+        ) {
+          provider[video.href] = providerName.toLowerCase();
         }
       }
-      if (Object.keys(provider).length > 0) {
-        break; // break outer loop if we have found at least one provider
-      }
     }
+    if (Object.keys(provider).length > 0) break;
+  }
 
+  if (Object.keys(provider).length === 0) {
+    for (let vi = 0; vi < finishedList.length; vi++) {
+      const video = finishedList[vi];
+      provider[video.href] = String(video.provider || "unknown").toLowerCase();
+    }
+  }
 
-  sendLog("Provider List: " + JSON.stringify(provider));
   return provider;
 }
 
+async function resolveRedirects(providerArray) {
+  const resolved = {};
+  const entries = Object.keys(providerArray);
 
-// Local Debugging function to send logs
-async function sendLog(message) {
-    // send http://192.168.2.130/sora-module/log.php?action=add&message=message
-    console.log(message);
-    return;
-
-    await fetch('http://192.168.2.130/sora-module/log.php?action=add&message=' + encodeURIComponent(message))
-    .catch(error => {
-        console.error('Error sending log:', error);
-    });
-}
-
-// Helper function to get the list of seasons
-// Site specific structure
-function getSeasonLinks(html) {
-    const seasonLinks = [];
-    const baseUrl = 'https://serienstream.to';
-    //             <nav class="mb-2" id="season-nav"> <ul class="nav list-items-nav">
-    const seasonRegex = /<nav class="mb-2" id="season-nav">[\s\S]*?<ul class="nav list-items-nav">([\s\S]*?)<\/ul>/;
-
-    const seasonMatch = seasonRegex.exec(html);
-    if (seasonMatch) {
-        const seasonList = seasonMatch[1];
-     
-        const seasonLinkRegex = /<a\s+[^>]*?href="([^"]+)"[^>]*?class="[^"]*alphabet-link/g;
-        let seasonLinkMatch;
-        const filmeLinks = [];
-        while ((seasonLinkMatch = seasonLinkRegex.exec(seasonList)) !== null) {
-            const [_, seasonLink] = seasonLinkMatch;
-            // ends with /filme or contains staffel-0
-            if (seasonLink.endsWith('/filme') || seasonLink.includes('staffel-0')) {
-                filmeLinks.push(seasonLink);
-            } else {
-                seasonLinks.push(seasonLink);
-            }
-        }
-        seasonLinks.push(...filmeLinks);
-    }
-
-    // if starts with /, add baseUrl
-    for (let i = 0; i < seasonLinks.length; i++) {
-        if (seasonLinks[i].startsWith('/')) {
-            seasonLinks[i] = baseUrl + seasonLinks[i];
-        }
-    }
-
-    return seasonLinks;
-}
-
-// Helper function to fetch episodes for a season
-// Site specific structure
-async function fetchSeasonEpisodes(url) {
+  for (let i = 0; i < entries.length; i++) {
+    const providerLink = entries[i];
+    const providerName = providerArray[providerLink];
     try {
-      const baseUrl = 'https://serienstream.to';
-        const fetchUrl = `${url}`;
-        const response = await soraFetch(fetchUrl);
-        const text = await response?.text() ?? await response;
+      const body = await soraFetchText(providerLink);
+      const winLocMatch = /window\.location\.href\s*=\s*['"]([^'"]+)['"]/.exec(body);
+      let winLocUrl = winLocMatch ? winLocMatch[1] : null;
 
-        //           <nav class="mb-3" id="episode-nav"> <ul class="nav list-items-nav"></ul>
-        const episodeDivRegex = /<nav class="mb-3" id="episode-nav">[\s\S]*?<ul class="nav list-items-nav">([\s\S]*?)<\/ul>/;
-        const episodeDivMatch = episodeDivRegex.exec(text);
-        const episodeList = [];
-        if (episodeDivMatch) {
-            const episodeListHtml = episodeDivMatch[1];
-          
-            const episodeLinkRegex = /<a\s+[^>]*?href="([^"]+)"[^>]*?class="[^"]*alphabet-link[^"]*"[^>]*>\s*([\s\S]*?)\s*<\/a>/g;
-            let episodeLinkMatch;
-            let number = 0;
-            while ((episodeLinkMatch = episodeLinkRegex.exec(episodeListHtml)) !== null) {
-                const [_, episodeLink] = episodeLinkMatch;
-                number += 1;
-                episodeList.push({ number, href: episodeLink });
-            }
-            console.log("Episode List for season " + url + ": " + JSON.stringify(episodeList));
-        }
+      if (!winLocUrl) {
+        const headers = {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+          "Referer": providerLink,
+          "x-Requested-With": "XMLHttpRequest",
+        };
+        const proxyResponseRaw = await soraFetch(
+          "https://passthrough-worker.simplepostrequest.workers.dev/noredirect?url=" +
+            encodeURIComponent(providerLink),
+          { headers: headers }
+        );
+        try {
+          const proxyResponse = proxyResponseRaw.json
+            ? await proxyResponseRaw.json()
+            : JSON.parse(typeof proxyResponseRaw === "string" ? proxyResponseRaw : await proxyResponseRaw.text());
+          if (proxyResponse && proxyResponse.location) {
+            winLocUrl = proxyResponse.location;
+          }
+        } catch (e) {}
+      }
 
-        // if starts with /, add baseUrl 
-        for (let i = 0; i < episodeList.length; i++) {
-            if (episodeList[i].href.startsWith('/')) {
-                episodeList[i].href = baseUrl + episodeList[i].href;
-            }
-        }
-
-        return episodeList;
-
-            
-
-            } catch (error) {
-        sendLog('FetchSeasonEpisodes helper function error:' + error);
-        return [{ number: '0', href: 'https://error.org' }];
+      if (winLocUrl && winLocUrl.indexOf("http") === 0) {
+        resolved[winLocUrl] = providerName;
+      } else if (providerLink.indexOf("/redirect/") === -1) {
+        resolved[providerLink] = providerName;
+      }
+    } catch (e) {
+      resolved[providerLink] = providerName;
     }
+  }
+
+  return Object.keys(resolved).length > 0 ? resolved : providerArray;
 }
 
-
-////////////////////////////////////////////////////////////////////////////////////
-/////////////////////////////       Helper Functions       ////////////////////////
-////////////////////////////      for ExtractStreamUrl    ////////////////////////
-/////////////////////////////////////////////////////////////////////////////////
-
-// Helper function to get the video links
-// Site specific structure
-function getVideoLinks(html) {
-    const baseUrl = 'https://serienstream.to';
-    
-    const videoLinks = [];
-    const videoLinkRegex = /<button\s+type="button"[^>]*?class="link-box btn btn-dark w-100 text-start gap-2"[^>]*?data-play-url="([^"]+)"[^>]*?data-provider-name="([^"]+)"[^>]*?data-language-id="([^"]+)"[^>]*?>/g;
-    let videoLinkMatch;
-    while ((videoLinkMatch = videoLinkRegex.exec(html)) !== null) {
-        const [_, href, provider, language] = videoLinkMatch;
-        videoLinks.push({ href: `${baseUrl}${href}`, provider: provider.toLowerCase(), language: parseInt(language) });
+function getSeasonLinks(html) {
+  const seasonLinks = [];
+  const seasonRegex = /<div class="hosterSiteDirectNav" id="stream">[\s\S]*?<ul>([\s\S]*?)<\/ul>/;
+  const seasonMatch = seasonRegex.exec(html);
+  if (seasonMatch) {
+    const seasonList = seasonMatch[1];
+    const seasonLinkRegex = /<a[^>]*href="([^"]+)"[^>]*>([^<]*)<\/a>/g;
+    let seasonLinkMatch;
+    const filmeLinks = [];
+    while ((seasonLinkMatch = seasonLinkRegex.exec(seasonList)) !== null) {
+      const seasonLink = seasonLinkMatch[1];
+      if (seasonLink.indexOf("/filme") !== -1 || seasonLink.indexOf("staffel-0") !== -1) {
+        filmeLinks.push(seasonLink);
+      } else {
+        seasonLinks.push(seasonLink);
+      }
     }
-
-    console.log("Video Links: " + JSON.stringify(videoLinks));  
-    
-    return videoLinks; // langKey, href, provider
+    for (let i = 0; i < filmeLinks.length; i++) seasonLinks.push(filmeLinks[i]);
+  }
+  return seasonLinks;
 }
 
-function _0xCheck() {
-    var _0x1a = typeof _0xB4F2 === 'function';
-    var _0x2b = typeof _0x7E9A === 'function';
-    return _0x1a && _0x2b ? (function(_0x3c) {
-        return _0x7E9A(_0x3c);
-    })(_0xB4F2()) : !1;
+async function fetchSeasonEpisodes(url) {
+  try {
+    const text = await soraFetchText(url);
+    const regex =
+      /<td class="seasonEpisodeTitle">\s*<a[^>]*href="([^"]+)"[^>]*>[\s\S]*?<strong>([^<]*)<\/strong>[\s\S]*?<span>([^<]*)<\/span>[\s\S]*?<\/a>/g;
+    const matches = [];
+    let match;
+    let number = 0;
+    while ((match = regex.exec(text)) !== null) {
+      number += 1;
+      const link = match[1];
+      matches.push({
+        number: number,
+        href: link.indexOf("http") === 0 ? link : BASE_URL + link,
+      });
+    }
+    return matches;
+  } catch (error) {
+    console.log("FetchSeasonEpisodes helper function error:" + error);
+    return [{ number: "0", href: "https://error.org" }];
+  }
 }
 
-function _0x7E9A(_){return((___,____,_____,______,_______,________,_________,__________,___________,____________)=>(____=typeof ___,_____=___&&___[String.fromCharCode(...[108,101,110,103,116,104])],______=[...String.fromCharCode(...[99,114,97,110,99,105])],_______=___?[...___[String.fromCharCode(...[116,111,76,111,119,101,114,67,97,115,101])]()]:[],(________=______[String.fromCharCode(...[115,108,105,99,101])]())&&_______[String.fromCharCode(...[102,111,114,69,97,99,104])]((_________,__________)=>(___________=________[String.fromCharCode(...[105,110,100,101,120,79,102])](_________))>=0&&________[String.fromCharCode(...[115,112,108,105,99,101])](___________,1)),____===String.fromCharCode(...[115,116,114,105,110,103])&&_____===16&&________[String.fromCharCode(...[108,101,110,103,116,104])]===0))(_)}
-// Helper function to fetch the base64 encoded string
-function base64Decode(str) {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
-    let output = '';
-
-    str = String(str).replace(/=+$/, '');
-
-    if (str.length % 4 === 1) {
-        throw new Error("'atob' failed: The string to be decoded is not correctly encoded.");
-    }
-
-    for (let bc = 0, bs, buffer, idx = 0; (buffer = str.charAt(idx++)); ~buffer && (bs = bc % 4 ? bs * 64 + buffer : buffer, bc++ % 4) ? output += String.fromCharCode(255 & bs >> (-2 * bc & 6)) : 0) {
-        buffer = chars.indexOf(buffer);
-    }
-
-    return output;
+function getVideoLinksClassic(html) {
+  const videoLinks = [];
+  const videoRegex =
+    /<li[^>]*data-lang-key="([^"]+)"[^>]*>[\s\S]*?<a[^>]*href="([^"]+)"[^>]*>[\s\S]*?<h4>([^<]+)<\/h4>/g;
+  let match;
+  while ((match = videoRegex.exec(html)) !== null) {
+    videoLinks.push({
+      langKey: match[1],
+      href: match[2],
+      provider: match[3].trim(),
+    });
+  }
+  return videoLinks;
 }
 
+function getVideoLinksNew(html) {
+  const videoLinks = [];
+  const videoLinkRegex =
+    /data-play-url="([^"]+)"[^>]*data-provider-name="([^"]+)"[^>]*data-language-id="([^"]+)"/g;
+  let videoLinkMatch;
+  while ((videoLinkMatch = videoLinkRegex.exec(html)) !== null) {
+    const href = videoLinkMatch[1];
+    videoLinks.push({
+      href: href.indexOf("http") === 0 ? href : BASE_URL + href,
+      provider: videoLinkMatch[2],
+      language: parseInt(videoLinkMatch[3], 10),
+    });
+  }
+  return videoLinks;
+}
 
+function getAvailableLanguages(html) {
+  const languages = [];
+  const languageRegex = /<img[^>]*data-lang-key="([^"]+)"[^>]*title="([^"]+)"[^>]*>/g;
+  let match;
+  while ((match = languageRegex.exec(html)) !== null) {
+    languages.push({ langKey: match[1], title: match[2] });
+  }
+  return languages;
+}
+
+function decodeHtml(str) {
+  return String(str)
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&#8230;/g, "...");
+}
+
+function stripTags(str) {
+  return String(str).replace(/<[^>]+>/g, "");
+}
 
 // ⚠️ DO NOT EDIT BELOW THIS LINE ⚠️
 // EDITING THIS FILE COULD BREAK THE UPDATER AND CAUSE ISSUES WITH THE EXTRACTOR

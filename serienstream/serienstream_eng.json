@@ -5,7 +5,7 @@
     "name": "lawrence-millard",
     "icon": "https://github.com/lawrence-millard.png"
   },
-  "version": "1.0.0",
+  "version": "1.0.1",
   "language": "English",
   "languageType": [
     "Dubbed"
@@ -13,7 +13,7 @@
   "streamType": "HLS",
   "quality": "720p",
   "baseUrl": "https://serienstream.to",
-  "searchBaseUrl": "https://serienstream.to/suche?term=%s",
+  "searchBaseUrl": "https://serienstream.to/ajax/seriesSearch?keyword=%s",
   "scriptUrl": "https://raw.githubusercontent.com/lawrence-millard/sources/main/serienstream/serienstream_eng.js",
   "asyncJS": true,
   "streamAsyncJS": false,
