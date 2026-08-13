@@ -120,37 +120,70 @@ function collectHosters(text) {
   return getVideoLinksNew(text);
 }
 
+function headerValue(headers, name) {
+  if (!headers) return "";
+  const want = name.toLowerCase();
+  if (typeof headers.get === "function") {
+    return headers.get(name) || headers.get(want) || "";
+  }
+  const keys = Object.keys(headers);
+  for (let i = 0; i < keys.length; i++) {
+    if (keys[i].toLowerCase() === want) return headers[keys[i]] || "";
+  }
+  return "";
+}
+
+function isHosterUrl(url) {
+  if (!url || url.indexOf("http") !== 0) return false;
+  if (url.indexOf(BASE_URL) === 0) return false;
+  return true;
+}
+
 async function resolveRedirects(providerArray) {
   const resolved = {};
   const entries = Object.keys(providerArray);
+  const iframeHeaders = {
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en-GB,en;q=0.9",
+    "Upgrade-Insecure-Requests": "1",
+    "Sec-Fetch-Dest": "iframe",
+    "Sec-Fetch-Mode": "navigate",
+    "Sec-Fetch-Site": "same-origin",
+    "Sec-Fetch-User": "?1",
+  };
+
   for (let i = 0; i < entries.length; i++) {
     const providerLink = entries[i];
     const providerName = providerArray[providerLink];
+    iframeHeaders["Referer"] = BASE_URL + "/";
+    let winLocUrl = null;
     try {
-      const body = await soraFetchText(providerLink);
-      const winLocMatch = /window\.location\.(?:href\s*=\s*|replace\()\s*['"]([^'"]+)['"]/.exec(body);
-      let winLocUrl = winLocMatch ? winLocMatch[1].replace(/\\\//g, "/") : null;
-      if (winLocUrl && winLocUrl.indexOf(BASE_URL) === 0 && winLocUrl.indexOf("/r") === -1) {
-        winLocUrl = null;
+      const response = await soraFetch(providerLink, { headers: iframeHeaders, method: "GET", body: null });
+      const location = headerValue(response && response.headers, "location") || headerValue(response && response.headers, "Location");
+      if (isHosterUrl(location)) winLocUrl = location;
+
+      const body = response && response.text ? await response.text() : "";
+      if (!winLocUrl && body) {
+        const winLocMatch = /window\.location\.(?:href\s*=\s*|replace\()\s*['"]([^'"]+)['"]/.exec(body);
+        const candidate = winLocMatch ? winLocMatch[1].replace(/\\\//g, "/") : null;
+        if (isHosterUrl(candidate)) winLocUrl = candidate;
       }
+
       if (!winLocUrl) {
-        const headers = {
-          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-          "Referer": providerLink,
-          "Sec-Fetch-Dest": "iframe",
-        };
         const proxyResponseRaw = await soraFetch(
           "https://passthrough-worker.simplepostrequest.workers.dev/noredirect?url=" + encodeURIComponent(providerLink),
-          { headers: headers }
+          { headers: iframeHeaders }
         );
         try {
           const proxyResponse = proxyResponseRaw.json
             ? await proxyResponseRaw.json()
             : JSON.parse(typeof proxyResponseRaw === "string" ? proxyResponseRaw : await proxyResponseRaw.text());
-          if (proxyResponse && proxyResponse.location) winLocUrl = proxyResponse.location;
+          if (proxyResponse && isHosterUrl(proxyResponse.location)) winLocUrl = proxyResponse.location;
         } catch (e) {}
       }
-      if (winLocUrl && winLocUrl.indexOf("http") === 0) {
+
+      if (isHosterUrl(winLocUrl)) {
         resolved[winLocUrl] = providerName;
       } else {
         resolved[providerLink] = providerName;
